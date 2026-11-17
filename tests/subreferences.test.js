@@ -117,6 +117,16 @@ test('footnoteText drops nested sub-references without touching the document', (
     assert.equal(footnoteText(doc.getElementById('cite_note-11')).trim(), '↑ p. 627.');
 });
 
+test('a Harvard/sfn short-cite follows a non-CITEREF bibliography anchor', () => {
+    const doc = new JSDOM(`<!DOCTYPE html><body><div id="mw-content-text">
+        <p>A claim long enough to be checked.${sup(11, '1.1', '')}</p>
+        <ol class="references"><li><span class="reference-text"><a href="#Miller2018">Miller 2018</a></span>
+          <ol class="mw-subreference-list"><li id="cite_note-11"><span class="reference-text">p. 5.</span></li></ol></li></ol>
+        <ul><li><cite id="Miller2018">Miller. <i>Book</i>. ${link(BOOK)}</cite></li></ul>
+    </div></body>`).window.document;
+    const ref = doc.querySelector('.reference a');
+    assert.equal(extractReferenceUrl(ref, doc), BOOK);
+});
 test('ccs verify accepts N.M for a sub-reference and finds its [N.M] marker', () => {
     const argv = n => ['node', 'ccs', 'verify', 'https://en.wikipedia.org/wiki/Foo', n];
     assert.equal(parseCliArgs(argv('10.1')).citationNumber, '10.1');

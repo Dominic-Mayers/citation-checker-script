@@ -144,34 +144,39 @@ function urlFromFootnote(refTarget, doc) {
     const directUrl = extractHttpUrl(refTarget);
     if (directUrl) return directUrl;
 
-    // Harvard/sfn citation support: the footnote may contain only a
-    // short-cite linking to the full citation via a #CITEREF anchor.
-    // Follow that link to resolve the actual source URL.
-    const citerefLink = Array.from(refTarget.querySelectorAll('a[href^="#CITEREF"]'))
-        .find(link => !inNestedSubreference(link, refTarget));
-    if (citerefLink) {
-        const citerefId = citerefLink.getAttribute('href').substring(1);
-        const fullCitation = doc.getElementById(citerefId);
-        if (fullCitation) {
-            const resolvedUrl = extractHttpUrl(fullCitation);
-            if (resolvedUrl) {
-                console.log('[CitationVerifier] Resolved Harvard/sfn citation via', citerefId);
-                return resolvedUrl;
-            }
+    // Harvard/sfn citation support: follow internal fragment links to the
+    // full bibliography entry. Anchor naming conventions vary by wiki.
+    const fragmentLinks = Array.from(refTarget.querySelectorAll('a[href*="#"]'))
+        .filter(link => !inNestedSubreference(link, refTarget));
+
+    for (const link of fragmentLinks) {
+        const href = link.getAttribute('href') || '';
+        const fragmentIndex = href.indexOf('#');
+        if (fragmentIndex === -1) continue;
+
+        const targetId = href.substring(fragmentIndex + 1);
+        if (!targetId ||
+            targetId.startsWith('cite_ref-') ||
+            targetId.startsWith('cite_note-')) continue;
+
+        const fullCitation = doc.getElementById(targetId);
+        if (!fullCitation) continue;
+
+        const resolvedUrl = extractHttpUrl(fullCitation);
+        if (resolvedUrl) {
+            console.log('[CitationVerifier] Resolved Harvard/sfn citation via', targetId);
+            return resolvedUrl;
         }
-        // Also try the parent <li> or <cite> element in case the anchor
-        // is on a child element within the full citation list item
-        const fullCitationLi = fullCitation && fullCitation.closest('li');
+
+        const fullCitationLi = fullCitation.closest('li');
         if (fullCitationLi && fullCitationLi !== fullCitation) {
-            const resolvedUrl = extractHttpUrl(fullCitationLi);
-            if (resolvedUrl) {
-                console.log('[CitationVerifier] Resolved Harvard/sfn citation via parent li of', citerefId);
-                return resolvedUrl;
+            const parentUrl = extractHttpUrl(fullCitationLi);
+            if (parentUrl) {
+                console.log('[CitationVerifier] Resolved Harvard/sfn citation via parent li of', targetId);
+                return parentUrl;
             }
         }
-        console.log('[CitationVerifier] Harvard/sfn citation found but no URL in full citation:', citerefId);
     }
-    return null;
 }
 
 export function extractPageNumber(refElement, doc = globalThis.document) {
