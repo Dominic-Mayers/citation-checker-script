@@ -164,3 +164,41 @@ ${method}
     isError: true,
   });
 });
+
+test('PDF upload extracts only the page retained from the citation', async () => {
+  const src = fs.readFileSync(MAIN_JS, 'utf8');
+  assert.match(src, /this\.activeSourcePageNum = pageNum;/, 'the clicked citation page must be retained');
+  assert.match(src, /this\.extractPdfText\(file, pageNum\)/, 'PDF upload must pass the retained page');
+
+  const start = src.indexOf('        async extractPdfText(file, pageNum = null) {');
+  const end = src.indexOf('        // Wire an uploaded PDF', start);
+  assert.ok(start !== -1 && end > start, 'could not locate extractPdfText');
+  const method = src.slice(start, end);
+  const requested = [];
+  const pdf = {
+    numPages: 400,
+    async getPage(number) {
+      requested.push(number);
+      return { async getTextContent() { return { items: [{ str: `Text on page ${number}` }] }; } };
+    },
+  };
+
+  const Harness = new Function(`
+    class Harness {
+      constructor(pdf) { this.pdf = pdf; }
+      ensurePdfJs() { return Promise.resolve({ getDocument: () => ({ promise: Promise.resolve(this.pdf) }) }); }
+      t(en, vars = {}) { return en.replace(/\\{(\\w+)\\}/g, (_, key) => vars[key] ?? ''); }
+${method}
+    }
+    return Harness;
+  `)();
+  const instance = new Harness(pdf);
+  const file = { arrayBuffer: async () => new ArrayBuffer(8) };
+
+  assert.equal(await instance.extractPdfText(file, 317), 'Text on page 317');
+  assert.deepEqual(requested, [317], 'no uncited PDF page should be traversed');
+  await assert.rejects(
+    () => instance.extractPdfText(file, 401),
+    /cited page 401 is not present.*400 pages/i,
+  );
+});

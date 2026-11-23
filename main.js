@@ -4913,6 +4913,9 @@ function useToolforgeSourceFetcher() {
         'This PDF has no selectable text (it looks scanned). Please paste the relevant passage instead.':
             'Ce PDF ne contient pas de texte sélectionnable (il semble numérisé). Veuillez plutôt coller le passage concerné.',
         'Loaded text from {name}. Ready to verify.': 'Texte chargé depuis {name}. Prêt à vérifier.',
+        'Loaded page {page} from {name}. Ready to verify.': 'Page {page} chargée depuis {name}. Prêt à vérifier.',
+        'The cited page {page} is not present in this PDF ({pages} pages).':
+            'La page citée {page} n’est pas présente dans ce PDF ({pages} pages).',
         'Could not read that PDF: {message}. Try pasting the text instead.':
             'Impossible de lire ce PDF : {message}. Essayez plutôt de coller le texte.',
         'Switched to {name}': 'Basculé vers {name}',
@@ -5291,6 +5294,9 @@ function useToolforgeSourceFetcher() {
         'This PDF has no selectable text (it looks scanned). Please paste the relevant passage instead.':
             'Este PDF no tiene texto seleccionable (parece escaneado); conviene pegar el fragmento correspondiente.',
         'Loaded text from {name}. Ready to verify.': 'Texto cargado desde {name}. Todo listo para verificar.',
+        'Loaded page {page} from {name}. Ready to verify.': 'Página {page} cargada desde {name}. Todo listo para verificar.',
+        'The cited page {page} is not present in this PDF ({pages} pages).':
+            'La página citada {page} no está presente en este PDF ({pages} páginas).',
         'Could not read that PDF: {message}. Try pasting the text instead.':
             'No se ha podido leer el PDF: {message}. Se puede pegar el texto en su lugar.',
         'Switched to {name}': 'Se ha cambiado a {name}',
@@ -5665,6 +5671,9 @@ function useToolforgeSourceFetcher() {
         'This PDF has no selectable text (it looks scanned). Please paste the relevant passage instead.':
             'В этом PDF нет выделяемого текста (похоже, это скан). Вставьте нужный фрагмент вручную.',
         'Loaded text from {name}. Ready to verify.': 'Текст загружен из {name}. Готово к проверке.',
+        'Loaded page {page} from {name}. Ready to verify.': 'Страница {page} из файла {name} загружена. Готово к проверке.',
+        'The cited page {page} is not present in this PDF ({pages} pages).':
+            'Указанной страницы {page} нет в этом PDF-файле ({pages} страниц).',
         'Could not read that PDF: {message}. Try pasting the text instead.':
             'Не удалось прочитать этот PDF: {message}. Попробуйте вставить текст вручную.',
         'Switched to {name}': 'Выполнено переключение на {name}',
@@ -6048,6 +6057,9 @@ function useToolforgeSourceFetcher() {
         'This PDF has no selectable text (it looks scanned). Please paste the relevant passage instead.':
             'בקובץ PDF זה אין טקסט שניתן לסמן (נראה שהוא סרוק). יש להדביק במקום זאת את הקטע הרלוונטי.',
         'Loaded text from {name}. Ready to verify.': 'הטקסט נטען מ־{name}. מוכן לבדיקה.',
+        'Loaded page {page} from {name}. Ready to verify.': 'עמוד {page} מתוך {name} נטען. מוכן לבדיקה.',
+        'The cited page {page} is not present in this PDF ({pages} pages).':
+            'העמוד המצוטט {page} אינו קיים בקובץ PDF זה ({pages} עמודים).',
         'Could not read that PDF: {message}. Try pasting the text instead.':
             'לא ניתן היה לקרוא את קובץ ה־PDF: {message}. אפשר לנסות להדביק את הטקסט במקום זאת.',
         'Switched to {name}': 'בוצע מעבר ל־{name}',
@@ -6205,6 +6217,9 @@ function useToolforgeSourceFetcher() {
             this.activeClaim = null;
             this.activeSource = null;
             this.activeSourceUrl = null;
+            // Locator from the clicked citation, retained for a PDF the editor
+            // uploads after an automated fetch is blocked.
+            this.activeSourcePageNum = null;
             // The clicked citation's footnote text, for the prompt (see
             // core/prompts.js's generateUserPrompt()).
             this.activeCitationText = null;
@@ -8556,6 +8571,8 @@ function useToolforgeSourceFetcher() {
                 const refUrl = this.extractReferenceUrl(refElement);
                 this.activeSourceUrl = refUrl;
                 this.activeCitationText = extractReferenceText(refElement, document);
+                const pageNum = this.extractPageNumber(refElement);
+                this.activeSourcePageNum = pageNum;
                 
                 if (!refUrl) {
                     this.showSourceTextInput();
@@ -8575,7 +8592,6 @@ function useToolforgeSourceFetcher() {
                 this.updateButtonVisibility();
                 this.updateStatus(this.t('Fetching source content...'));
                 const fetchId = ++this.currentFetchId;
-                const pageNum = this.extractPageNumber(refElement);
                 const fetchResult = await this.fetchSourceContent(refUrl, pageNum);
 
                 if (fetchId !== this.currentFetchId) {
@@ -8791,13 +8807,22 @@ function useToolforgeSourceFetcher() {
         // Pull the text layer out of a PDF file. Returns '' for PDFs with no
         // selectable text (e.g. scanned/image-only), which the caller surfaces
         // as a "paste the passage instead" message rather than sending blanks.
-        async extractPdfText(file) {
+        async extractPdfText(file, pageNum = null) {
             const pdfjsLib = await this.ensurePdfJs();
             const data = new Uint8Array(await file.arrayBuffer());
             const pdf = await pdfjsLib.getDocument({ data }).promise;
+            if (pageNum != null && (pageNum < 1 || pageNum > pdf.numPages)) {
+                throw new Error(this.t('The cited page {page} is not present in this PDF ({pages} pages).', {
+                    page: pageNum,
+                    pages: pdf.numPages,
+                }));
+            }
+            const pageNumbers = pageNum == null
+                ? Array.from({ length: pdf.numPages }, (_, i) => i + 1)
+                : [pageNum];
             const pages = [];
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
+            for (const number of pageNumbers) {
+                const page = await pdf.getPage(number);
                 const content = await page.getTextContent();
                 pages.push(content.items.map(item => item.str).join(' '));
             }
@@ -8816,14 +8841,17 @@ function useToolforgeSourceFetcher() {
             }
             this.updateStatus(this.t('Reading {name}…', { name: file.name }));
             try {
-                const text = await this.extractPdfText(file);
+                const pageNum = this.activeSourcePageNum;
+                const text = await this.extractPdfText(file, pageNum);
                 if (!text) {
                     this.updateStatus(this.t('This PDF has no selectable text (it looks scanned). Please paste the relevant passage instead.'), true);
                     return;
                 }
                 this.sourceTextInput.setValue(text);
                 this.loadManualSourceText();
-                this.updateStatus(this.t('Loaded text from {name}. Ready to verify.', { name: file.name }));
+                this.updateStatus(pageNum == null
+                    ? this.t('Loaded text from {name}. Ready to verify.', { name: file.name })
+                    : this.t('Loaded page {page} from {name}. Ready to verify.', { page: pageNum, name: file.name }));
             } catch (error) {
                 console.error('PDF extraction failed:', error);
                 this.updateStatus(this.t('Could not read that PDF: {message}. Try pasting the text instead.', { message: error.message }), true);
