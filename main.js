@@ -7136,7 +7136,8 @@ function useToolforgeSourceFetcher() {
                 #verifier-source-pdf-input {
                     display: none;
                 }
-                #verifier-source-pdf-label {
+                #verifier-source-pdf-label,
+                .verifier-source-download-link {
                     display: inline-block;
                     padding: 4px 10px;
                     font-size: 13px;
@@ -7146,10 +7147,13 @@ function useToolforgeSourceFetcher() {
                     border-radius: 4px;
                     cursor: pointer;
                     user-select: none;
+                    text-decoration: none;
                 }
-                #verifier-source-pdf-label:hover {
+                #verifier-source-pdf-label:hover,
+                .verifier-source-download-link:hover {
                     background: var(--sv-ctl-bg-hover);
                     border-color: var(--sv-ctl-bd-hover);
+                    text-decoration: none;
                 }
                 #verifier-source-pdf-hint {
                     font-size: 12px;
@@ -8579,7 +8583,7 @@ function useToolforgeSourceFetcher() {
                 }
 
                 if (!fetchResult.content) {
-                    if (fetchResult.status === 403) {
+                    if (this.sourceFetchWasForbidden(fetchResult)) {
                         this.showBlockedSourceInput(refUrl);
                         return;
                     }
@@ -8661,9 +8665,17 @@ function useToolforgeSourceFetcher() {
             this.showSourceTextInput(false, message);
             document.getElementById('verifier-source-text').innerHTML = `
                 <div>${this.escapeHtml(message)}</div>
-                <a href="${this.escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(this.t('Open source to download'))}</a>
+                <a class="verifier-source-download-link" href="${this.escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(this.t('Open source to download'))}</a>
             `;
             this.updateStatus(message, true);
+        }
+
+        // The current fetcher returns a numeric upstream status. Older proxy
+        // deployments wrapped publisher failures in HTTP 200 and exposed the
+        // real status only in text ("Source returned 403"). Support both so
+        // the guided download path also works before every proxy is upgraded.
+        sourceFetchWasForbidden(result) {
+            return result?.status === 403 || /\b(?:HTTP\s*)?403\b/i.test(result?.error || '');
         }
 
         hideSourceTextInput() {

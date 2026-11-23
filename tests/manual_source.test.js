@@ -114,7 +114,7 @@ test('a blocked source offers the browser download and existing PDF upload path'
   const src = fs.readFileSync(MAIN_JS, 'utf8');
   assert.match(
     src,
-    /if \(fetchResult\.status === 403\) \{\s*this\.showBlockedSourceInput\(refUrl\);\s*return;/,
+    /if \(this\.sourceFetchWasForbidden\(fetchResult\)\) \{\s*this\.showBlockedSourceInput\(refUrl\);\s*return;/,
     'the 403 fetch branch must open the guided manual-source path',
   );
   const start = src.indexOf('        showBlockedSourceInput(url) {');
@@ -143,6 +143,10 @@ ${method}
   `)(dom.window.document);
 
   const instance = new Harness();
+  assert.equal(instance.sourceFetchWasForbidden({ status: 403, error: 'Forbidden' }), true);
+  assert.equal(instance.sourceFetchWasForbidden({ status: 200, error: 'Source returned 403' }), true);
+  assert.equal(instance.sourceFetchWasForbidden({ status: 200, error: 'Source returned HTTP 403' }), true);
+  assert.equal(instance.sourceFetchWasForbidden({ status: 404, error: 'Source returned HTTP 404' }), false);
   const url = 'https://example.test/source.pdf?x=1&y=2';
   instance.showBlockedSourceInput(url);
 
@@ -150,6 +154,7 @@ ${method}
   assert.equal(link.href, url);
   assert.equal(link.target, '_blank');
   assert.equal(link.rel, 'noopener noreferrer');
+  assert.equal(link.className, 'verifier-source-download-link');
   assert.match(link.textContent, /Open source to download/);
   assert.equal(instance.calls[0].kind, 'input', 'the existing upload panel must be opened');
   assert.equal(instance.calls[0].forOverride, false);
