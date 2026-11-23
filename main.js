@@ -4741,6 +4741,8 @@ function useToolforgeSourceFetcher() {
         'Source URL:': 'URL de la source :',
         'No URL found. Please paste the source text below:':
             'Aucune URL trouvée. Veuillez coller le texte de la source ci-dessous :',
+        'No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.':
+            'Aucune URL en ligne n’a été trouvée. Téléversez une copie numérique (PDF) ci-dessous; les pages ou le localisateur cités{locator} seront utilisés.',
         'Manual Source Text:': 'Texte de source manuel :',
         'No source loaded.': 'Aucune source chargée.',
         'Click "Verify Claim" to verify the selected claim against the source.':
@@ -5131,6 +5133,8 @@ function useToolforgeSourceFetcher() {
         'Source URL:': 'URL de la fuente:',
         'No URL found. Please paste the source text below:':
             'No se ha encontrado ninguna URL; el texto de la fuente puede pegarse a continuación:',
+        'No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.':
+            'No se ha encontrado ninguna URL en línea. Puede cargarse una copia digital (PDF) a continuación; se usarán las páginas o el localizador citados{locator}.',
         'Manual Source Text:': 'Texto de la fuente introducido manualmente:',
         'No source loaded.': 'No hay ninguna fuente cargada.',
         'Click "Verify Claim" to verify the selected claim against the source.':
@@ -5517,6 +5521,8 @@ function useToolforgeSourceFetcher() {
         'Source URL:': 'URL источника:',
         'No URL found. Please paste the source text below:':
             'URL не найден. Вставьте текст источника ниже:',
+        'No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.':
+            'URL в интернете не найден. Загрузите цифровую копию (PDF) ниже; будут использованы указанные страницы или локатор{locator}.',
         'Manual Source Text:': 'Текст источника (введён вручную):',
         'No source loaded.': 'Источник не загружен.',
         'Click "Verify Claim" to verify the selected claim against the source.':
@@ -5911,6 +5917,8 @@ function useToolforgeSourceFetcher() {
         'Source URL:': 'כתובת המקור:',
         'No URL found. Please paste the source text below:':
             'לא נמצאה כתובת URL. יש להדביק את טקסט המקור למטה:',
+        'No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.':
+            'לא נמצאה כתובת URL מקוונת. ניתן להעלות עותק דיגיטלי (PDF) למטה; ייעשה שימוש בעמודים או במאתר שצוינו{locator}.',
         'Manual Source Text:': 'טקסט מקור שהוזן ידנית:',
         'No source loaded.': 'לא נטען מקור.',
         'Click "Verify Claim" to verify the selected claim against the source.':
@@ -8626,8 +8634,7 @@ function useToolforgeSourceFetcher() {
                 const pageNum = pageLocator?.kind === 'pages' ? pageLocator.start : null;
                 
                 if (!refUrl) {
-                    this.showSourceTextInput();
-                    this.updateStatus(this.t('No URL found in reference. Please paste the source text below.'));
+                    this.showUnlinkedSourceInput(pageLocator);
                     return;
                 }
 
@@ -8721,6 +8728,17 @@ function useToolforgeSourceFetcher() {
             }
             this.sourceTextInput.setValue('');
             this.hideOverrideButton();
+        }
+
+        // A printed or otherwise unlinked work may still be available to the
+        // editor as a PDF. Skip the impossible fetch and expose the existing
+        // upload path immediately. The locator retained above is later passed
+        // to extractPdfText(), exactly as it is after a blocked URL fetch.
+        showUnlinkedSourceInput(locator) {
+            const locatorText = locator?.text ? ` (${locator.text})` : '';
+            const message = this.t('No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.', { locator: locatorText });
+            this.showSourceTextInput(false, message);
+            this.updateStatus(message);
         }
 
         // A 403 often means that an anti-bot gate allows the editor's browser

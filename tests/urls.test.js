@@ -32,6 +32,21 @@ test('extractPageLocator preserves chapter and section locators for manual PDF m
   assert.equal(extractPageNumber(ref, doc), null);
 });
 
+test('an unlinked Harvard/sfn short citation retains its locator for a manual PDF', () => {
+  const jsdom = new JSDOM(`<!DOCTYPE html><body>
+    <a id="ref" href="#cite_note-Popper1998ch._8,_sec._4-8">8</a>
+    <ol><li id="cite_note-Popper1998ch._8,_sec._4-8">
+      <span class="reference-text"><a href="#Popper1998">Popper 1998</a>, ch. 8, sec. 4.</span>
+    </li></ol>
+    <cite id="Popper1998" class="citation book">Popper, Karl (1998). <i>Realism and the Aim of Science</i>.</cite>
+  </body>`);
+  const doc = jsdom.window.document;
+  const ref = doc.getElementById('ref');
+
+  assert.equal(extractReferenceUrl(ref, doc), null);
+  assert.deepEqual(extractPageLocator(ref, doc), { kind: 'text', text: 'ch. 8, sec. 4.' });
+});
+
 test('extractHttpUrl pulls href from a direct <a>', () => {
   // The function calls querySelectorAll on the element, so it needs a container
   // with an <a> tag inside it, not the <a> tag itself

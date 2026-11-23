@@ -165,6 +165,39 @@ ${method}
   });
 });
 
+test('an unlinked source opens the PDF upload path and displays its retained locator', () => {
+  const src = fs.readFileSync(MAIN_JS, 'utf8');
+  assert.match(
+    src,
+    /if \(!refUrl\) \{\s*this\.showUnlinkedSourceInput\(pageLocator\);\s*return;/,
+    'the no-URL branch must skip fetching and open the digital-copy path',
+  );
+  const start = src.indexOf('        showUnlinkedSourceInput(locator) {');
+  const end = src.indexOf('        // A 403 often means', start);
+  assert.ok(start !== -1 && end > start, 'could not locate showUnlinkedSourceInput');
+  const method = src.slice(start, end);
+
+  const Harness = new Function(`
+    class Harness {
+      constructor() { this.calls = []; }
+      t(en, values = {}) { return en.replace('{locator}', values.locator || ''); }
+      showSourceTextInput(forOverride, message) { this.calls.push({ kind: 'input', forOverride, message }); }
+      updateStatus(message) { this.calls.push({ kind: 'status', message }); }
+${method}
+    }
+    return Harness;
+  `)();
+
+  const instance = new Harness();
+  instance.showUnlinkedSourceInput({ kind: 'text', text: 'ch. 8, sec. 4.' });
+
+  assert.equal(instance.calls[0].kind, 'input');
+  assert.equal(instance.calls[0].forOverride, false);
+  assert.match(instance.calls[0].message, /digital copy \(PDF\)/);
+  assert.match(instance.calls[0].message, /ch\. 8, sec\. 4\./);
+  assert.equal(instance.calls[1].kind, 'status');
+});
+
 test('PDF upload maps printed ranges and asks for physical pages when needed', async () => {
   const src = fs.readFileSync(MAIN_JS, 'utf8');
   assert.match(src, /this\.activeSourceLocator = pageLocator;/, 'the clicked citation locator must be retained');
