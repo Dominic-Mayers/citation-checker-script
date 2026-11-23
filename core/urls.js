@@ -179,7 +179,7 @@ function urlFromFootnote(refTarget, doc) {
     }
 }
 
-export function extractPageNumber(refElement, doc = globalThis.document) {
+export function extractPageLocator(refElement, doc = globalThis.document) {
     const href = refElement.getAttribute('href');
     if (!href) return null;
 
@@ -195,13 +195,25 @@ export function extractPageNumber(refElement, doc = globalThis.document) {
     // main reference: a page there ("pp. 600–700") is the whole work's range,
     // and fetching only its first page would hide the cited one.
     const text = footnoteText(refTarget);
-    // Match patterns like "p. 42", "pp. 42-43", "p.42", "page 42", "pages 42–43"
-    const match = text.match(/\bp(?:p|ages?)?\.?\s*(\d+)/i);
-    if (match) {
-        console.log('[CitationVerifier] Extracted page number:', match[1]);
-        return parseInt(match[1], 10);
+    // Numeric page or page range: "p. 42", "pp. 42-43", "pages 42–43".
+    const pages = text.match(/\bp(?:p|ages?)?\.?\s*(\d+)(?:\s*[-–—]\s*(\d+))?/i);
+    if (pages) {
+        const start = parseInt(pages[1], 10);
+        const end = pages[2] ? parseInt(pages[2], 10) : start;
+        console.log('[CitationVerifier] Extracted page locator:', start, end);
+        return { kind: 'pages', start, end, text: pages[0] };
     }
+
+    // Non-page locators cannot be mapped to PDF pages automatically, but keep
+    // them so the upload flow can ask the editor for the corresponding pages.
+    const textual = text.match(/\b(?:chap(?:ter|itre)?\.?|ch\.|sec(?:tion|t(?:ion)?)?\.?|§)\s*[\wIVXLCDM.-]+(?:\s*,?\s*(?:sec(?:tion|t(?:ion)?)?\.?|§)\s*[\wIVXLCDM.-]+)?/i);
+    if (textual) return { kind: 'text', text: textual[0].trim() };
     return null;
+}
+
+export function extractPageNumber(refElement, doc = globalThis.document) {
+    const locator = extractPageLocator(refElement, doc);
+    return locator?.kind === 'pages' ? locator.start : null;
 }
 
 export function isGoogleBooksUrl(url) {

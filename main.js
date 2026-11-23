@@ -1306,7 +1306,7 @@ function urlFromFootnote(refTarget, doc) {
     }
 }
 
-function extractPageNumber(refElement, doc = globalThis.document) {
+function extractPageLocator(refElement, doc = globalThis.document) {
     const href = refElement.getAttribute('href');
     if (!href) return null;
 
@@ -1322,13 +1322,25 @@ function extractPageNumber(refElement, doc = globalThis.document) {
     // main reference: a page there ("pp. 600–700") is the whole work's range,
     // and fetching only its first page would hide the cited one.
     const text = footnoteText(refTarget);
-    // Match patterns like "p. 42", "pp. 42-43", "p.42", "page 42", "pages 42–43"
-    const match = text.match(/\bp(?:p|ages?)?\.?\s*(\d+)/i);
-    if (match) {
-        console.log('[CitationVerifier] Extracted page number:', match[1]);
-        return parseInt(match[1], 10);
+    // Numeric page or page range: "p. 42", "pp. 42-43", "pages 42–43".
+    const pages = text.match(/\bp(?:p|ages?)?\.?\s*(\d+)(?:\s*[-–—]\s*(\d+))?/i);
+    if (pages) {
+        const start = parseInt(pages[1], 10);
+        const end = pages[2] ? parseInt(pages[2], 10) : start;
+        console.log('[CitationVerifier] Extracted page locator:', start, end);
+        return { kind: 'pages', start, end, text: pages[0] };
     }
+
+    // Non-page locators cannot be mapped to PDF pages automatically, but keep
+    // them so the upload flow can ask the editor for the corresponding pages.
+    const textual = text.match(/\b(?:chap(?:ter|itre)?\.?|ch\.|sec(?:tion|t(?:ion)?)?\.?|§)\s*[\wIVXLCDM.-]+(?:\s*,?\s*(?:sec(?:tion|t(?:ion)?)?\.?|§)\s*[\wIVXLCDM.-]+)?/i);
+    if (textual) return { kind: 'text', text: textual[0].trim() };
     return null;
+}
+
+function extractPageNumber(refElement, doc = globalThis.document) {
+    const locator = extractPageLocator(refElement, doc);
+    return locator?.kind === 'pages' ? locator.start : null;
 }
 
 function isGoogleBooksUrl(url) {
@@ -4500,6 +4512,7 @@ async function runLeadCheck({ sentences, body, articleTitle, only } = {}, {
 // core/, so while it sat inside the injected region the next `npm run build`
 // silently deleted it, taking loadManualSourceText() with it.
 const MAX_MANUAL_SOURCE_CHARS = 80000;
+const MAX_PDF_PAGE_SELECTION = 50;
 
 // Experimental: opt-in override that routes HuggingFace LLM calls through the
 // tf-llm-router Toolforge tool
@@ -4916,6 +4929,15 @@ function useToolforgeSourceFetcher() {
         'Loaded page {page} from {name}. Ready to verify.': 'Page {page} chargée depuis {name}. Prêt à vérifier.',
         'The cited page {page} is not present in this PDF ({pages} pages).':
             'La page citée {page} n’est pas présente dans ce PDF ({pages} pages).',
+        'The reference cites {locator}, but this PDF does not identify matching printed pages. Enter the corresponding PDF page or range (for example, 12 or 12-14).':
+            'La référence cite {locator}, mais ce PDF n’identifie pas les pages imprimées correspondantes. Indiquez la page ou la plage PDF correspondante (par exemple 12 ou 12-14).',
+        'The reference uses locator "{locator}". Enter the corresponding PDF page or range (for example, 12 or 12-14).':
+            'La référence utilise le repère « {locator} ». Indiquez la page ou la plage PDF correspondante (par exemple 12 ou 12-14).',
+        'Invalid PDF page selection. Enter a page or range such as 12, 12-14, or 12, 15.':
+            'Sélection de pages PDF invalide. Indiquez une page ou une plage comme 12, 12-14 ou 12, 15.',
+        'Select at most {count} PDF pages.': 'Sélectionnez au maximum {count} pages PDF.',
+        'Loaded PDF pages {pages} from {name}. Ready to verify.':
+            'Pages PDF {pages} chargées depuis {name}. Prêt à vérifier.',
         'Could not read that PDF: {message}. Try pasting the text instead.':
             'Impossible de lire ce PDF : {message}. Essayez plutôt de coller le texte.',
         'Switched to {name}': 'Basculé vers {name}',
@@ -5297,6 +5319,15 @@ function useToolforgeSourceFetcher() {
         'Loaded page {page} from {name}. Ready to verify.': 'Página {page} cargada desde {name}. Todo listo para verificar.',
         'The cited page {page} is not present in this PDF ({pages} pages).':
             'La página citada {page} no está presente en este PDF ({pages} páginas).',
+        'The reference cites {locator}, but this PDF does not identify matching printed pages. Enter the corresponding PDF page or range (for example, 12 or 12-14).':
+            'La referencia cita {locator}, pero el PDF no identifica las páginas impresas correspondientes. Indíquese la página o el intervalo del PDF correspondiente (por ejemplo, 12 o 12-14).',
+        'The reference uses locator "{locator}". Enter the corresponding PDF page or range (for example, 12 or 12-14).':
+            'La referencia usa el localizador «{locator}». Indíquese la página o el intervalo del PDF correspondiente (por ejemplo, 12 o 12-14).',
+        'Invalid PDF page selection. Enter a page or range such as 12, 12-14, or 12, 15.':
+            'La selección de páginas del PDF no es válida. Indíquese una página o un intervalo como 12, 12-14 o 12, 15.',
+        'Select at most {count} PDF pages.': 'Deben seleccionarse como máximo {count} páginas del PDF.',
+        'Loaded PDF pages {pages} from {name}. Ready to verify.':
+            'Páginas {pages} del PDF cargadas desde {name}. Todo listo para verificar.',
         'Could not read that PDF: {message}. Try pasting the text instead.':
             'No se ha podido leer el PDF: {message}. Se puede pegar el texto en su lugar.',
         'Switched to {name}': 'Se ha cambiado a {name}',
@@ -5674,6 +5705,15 @@ function useToolforgeSourceFetcher() {
         'Loaded page {page} from {name}. Ready to verify.': 'Страница {page} из файла {name} загружена. Готово к проверке.',
         'The cited page {page} is not present in this PDF ({pages} pages).':
             'Указанной страницы {page} нет в этом PDF-файле ({pages} страниц).',
+        'The reference cites {locator}, but this PDF does not identify matching printed pages. Enter the corresponding PDF page or range (for example, 12 or 12-14).':
+            'В ссылке указано {locator}, но PDF не содержит соответствующих меток печатных страниц. Введите соответствующую страницу или диапазон PDF (например, 12 или 12-14).',
+        'The reference uses locator "{locator}". Enter the corresponding PDF page or range (for example, 12 or 12-14).':
+            'В ссылке используется указатель «{locator}». Введите соответствующую страницу или диапазон PDF (например, 12 или 12-14).',
+        'Invalid PDF page selection. Enter a page or range such as 12, 12-14, or 12, 15.':
+            'Неверно выбраны страницы PDF. Введите страницу или диапазон, например 12, 12-14 или 12, 15.',
+        'Select at most {count} PDF pages.': 'Выберите не более {count} страниц PDF.',
+        'Loaded PDF pages {pages} from {name}. Ready to verify.':
+            'Страницы PDF {pages} из файла {name} загружены. Готово к проверке.',
         'Could not read that PDF: {message}. Try pasting the text instead.':
             'Не удалось прочитать этот PDF: {message}. Попробуйте вставить текст вручную.',
         'Switched to {name}': 'Выполнено переключение на {name}',
@@ -6060,6 +6100,15 @@ function useToolforgeSourceFetcher() {
         'Loaded page {page} from {name}. Ready to verify.': 'עמוד {page} מתוך {name} נטען. מוכן לבדיקה.',
         'The cited page {page} is not present in this PDF ({pages} pages).':
             'העמוד המצוטט {page} אינו קיים בקובץ PDF זה ({pages} עמודים).',
+        'The reference cites {locator}, but this PDF does not identify matching printed pages. Enter the corresponding PDF page or range (for example, 12 or 12-14).':
+            'ההפניה מציינת {locator}, אך קובץ ה־PDF אינו מזהה את עמודי הדפוס המתאימים. יש להזין את עמוד ה־PDF או את הטווח המתאים (לדוגמה 12 או 12-14).',
+        'The reference uses locator "{locator}". Enter the corresponding PDF page or range (for example, 12 or 12-14).':
+            'ההפניה משתמשת במאתר „{locator}”. יש להזין את עמוד ה־PDF או את הטווח המתאים (לדוגמה 12 או 12-14).',
+        'Invalid PDF page selection. Enter a page or range such as 12, 12-14, or 12, 15.':
+            'בחירת עמודי ה־PDF אינה תקינה. יש להזין עמוד או טווח כגון 12, 12-14 או 12, 15.',
+        'Select at most {count} PDF pages.': 'יש לבחור לכל היותר {count} עמודי PDF.',
+        'Loaded PDF pages {pages} from {name}. Ready to verify.':
+            'עמודי PDF ‏{pages} מתוך {name} נטענו. מוכן לבדיקה.',
         'Could not read that PDF: {message}. Try pasting the text instead.':
             'לא ניתן היה לקרוא את קובץ ה־PDF: {message}. אפשר לנסות להדביק את הטקסט במקום זאת.',
         'Switched to {name}': 'בוצע מעבר ל־{name}',
@@ -6218,8 +6267,9 @@ function useToolforgeSourceFetcher() {
             this.activeSource = null;
             this.activeSourceUrl = null;
             // Locator from the clicked citation, retained for a PDF the editor
-            // uploads after an automated fetch is blocked.
-            this.activeSourcePageNum = null;
+            // uploads after an automated fetch is blocked. Numeric ranges can
+            // be mapped through PDF page labels; textual locators need input.
+            this.activeSourceLocator = null;
             // The clicked citation's footnote text, for the prompt (see
             // core/prompts.js's generateUserPrompt()).
             this.activeCitationText = null;
@@ -8571,8 +8621,9 @@ function useToolforgeSourceFetcher() {
                 const refUrl = this.extractReferenceUrl(refElement);
                 this.activeSourceUrl = refUrl;
                 this.activeCitationText = extractReferenceText(refElement, document);
-                const pageNum = this.extractPageNumber(refElement);
-                this.activeSourcePageNum = pageNum;
+                const pageLocator = this.extractPageLocator(refElement);
+                this.activeSourceLocator = pageLocator;
+                const pageNum = pageLocator?.kind === 'pages' ? pageLocator.start : null;
                 
                 if (!refUrl) {
                     this.showSourceTextInput();
@@ -8804,22 +8855,87 @@ function useToolforgeSourceFetcher() {
             return this._pdfJsLoading;
         }
 
+        requestPdfPageSelection(message, defaultValue = '') {
+            return window.prompt(message, defaultValue);
+        }
+
+        parsePdfPageSelection(value, totalPages) {
+            const parts = String(value || '').trim().split(/\s*,\s*/).filter(Boolean);
+            if (!parts.length) {
+                throw new Error(this.t('Invalid PDF page selection. Enter a page or range such as 12, 12-14, or 12, 15.'));
+            }
+            const selected = [];
+            for (const part of parts) {
+                const match = part.match(/^(\d+)(?:\s*[-–—]\s*(\d+))?$/);
+                if (!match) {
+                    throw new Error(this.t('Invalid PDF page selection. Enter a page or range such as 12, 12-14, or 12, 15.'));
+                }
+                const start = Number(match[1]);
+                const end = match[2] ? Number(match[2]) : start;
+                if (start < 1 || end < start) {
+                    throw new Error(this.t('Invalid PDF page selection. Enter a page or range such as 12, 12-14, or 12, 15.'));
+                }
+                for (let page = start; page <= end; page++) {
+                    if (page > totalPages) {
+                        throw new Error(this.t('The cited page {page} is not present in this PDF ({pages} pages).', {
+                            page,
+                            pages: totalPages,
+                        }));
+                    }
+                    if (!selected.includes(page)) selected.push(page);
+                    if (selected.length > MAX_PDF_PAGE_SELECTION) {
+                        throw new Error(this.t('Select at most {count} PDF pages.', { count: MAX_PDF_PAGE_SELECTION }));
+                    }
+                }
+            }
+            return selected;
+        }
+
+        async pdfPagesForLocator(pdf, locator) {
+            if (!locator) return undefined;
+
+            if (locator.kind === 'pages') {
+                let labels = null;
+                try {
+                    labels = typeof pdf.getPageLabels === 'function' ? await pdf.getPageLabels() : null;
+                } catch (_) {}
+                if (Array.isArray(labels)) {
+                    const startIndex = labels.findIndex(label => String(label) === String(locator.start));
+                    const endIndex = labels.findIndex(label => String(label) === String(locator.end));
+                    if (startIndex !== -1 && endIndex >= startIndex) {
+                        return this.parsePdfPageSelection(`${startIndex + 1}-${endIndex + 1}`, pdf.numPages);
+                    }
+                }
+
+                const cited = locator.start === locator.end
+                    ? String(locator.start)
+                    : `${locator.start}-${locator.end}`;
+                const answer = this.requestPdfPageSelection(
+                    this.t('The reference cites {locator}, but this PDF does not identify matching printed pages. Enter the corresponding PDF page or range (for example, 12 or 12-14).', { locator: locator.text || cited }),
+                    cited,
+                );
+                return answer == null ? null : this.parsePdfPageSelection(answer, pdf.numPages);
+            }
+
+            const answer = this.requestPdfPageSelection(
+                this.t('The reference uses locator "{locator}". Enter the corresponding PDF page or range (for example, 12 or 12-14).', { locator: locator.text }),
+            );
+            return answer == null ? null : this.parsePdfPageSelection(answer, pdf.numPages);
+        }
+
         // Pull the text layer out of a PDF file. Returns '' for PDFs with no
-        // selectable text (e.g. scanned/image-only), which the caller surfaces
-        // as a "paste the passage instead" message rather than sending blanks.
-        async extractPdfText(file, pageNum = null) {
+        // selectable text (e.g. scanned/image-only), and null when the editor
+        // cancels a request to map a citation locator onto physical PDF pages.
+        async extractPdfText(file, locator = null) {
             const pdfjsLib = await this.ensurePdfJs();
             const data = new Uint8Array(await file.arrayBuffer());
             const pdf = await pdfjsLib.getDocument({ data }).promise;
-            if (pageNum != null && (pageNum < 1 || pageNum > pdf.numPages)) {
-                throw new Error(this.t('The cited page {page} is not present in this PDF ({pages} pages).', {
-                    page: pageNum,
-                    pages: pdf.numPages,
-                }));
-            }
-            const pageNumbers = pageNum == null
+            const selectedPages = await this.pdfPagesForLocator(pdf, locator);
+            if (selectedPages === null) return null;
+            const pageNumbers = selectedPages === undefined
                 ? Array.from({ length: pdf.numPages }, (_, i) => i + 1)
-                : [pageNum];
+                : selectedPages;
+            this.lastExtractedPdfPages = selectedPages;
             const pages = [];
             for (const number of pageNumbers) {
                 const page = await pdf.getPage(number);
@@ -8841,17 +8957,24 @@ function useToolforgeSourceFetcher() {
             }
             this.updateStatus(this.t('Reading {name}…', { name: file.name }));
             try {
-                const pageNum = this.activeSourcePageNum;
-                const text = await this.extractPdfText(file, pageNum);
+                const text = await this.extractPdfText(file, this.activeSourceLocator);
+                if (text === null) {
+                    this.updateStatus(this.t('Cancelled'));
+                    return;
+                }
                 if (!text) {
                     this.updateStatus(this.t('This PDF has no selectable text (it looks scanned). Please paste the relevant passage instead.'), true);
                     return;
                 }
                 this.sourceTextInput.setValue(text);
                 this.loadManualSourceText();
-                this.updateStatus(pageNum == null
+                const pages = this.lastExtractedPdfPages;
+                this.updateStatus(!pages
                     ? this.t('Loaded text from {name}. Ready to verify.', { name: file.name })
-                    : this.t('Loaded page {page} from {name}. Ready to verify.', { page: pageNum, name: file.name }));
+                    : this.t('Loaded PDF pages {pages} from {name}. Ready to verify.', {
+                        pages: pages.join(', '),
+                        name: file.name,
+                    }));
             } catch (error) {
                 console.error('PDF extraction failed:', error);
                 this.updateStatus(this.t('Could not read that PDF: {message}. Try pasting the text instead.', { message: error.message }), true);
@@ -8876,6 +8999,10 @@ function useToolforgeSourceFetcher() {
 
         extractPageNumber(refElement) {
             return extractPageNumber(refElement);
+        }
+
+        extractPageLocator(refElement) {
+            return extractPageLocator(refElement);
         }
 
         isGoogleBooksUrl(url) {

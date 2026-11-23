@@ -165,18 +165,23 @@ ${method}
   });
 });
 
-test('PDF upload extracts only the page retained from the citation', async () => {
+test('PDF upload maps printed ranges and asks for physical pages when needed', async () => {
   const src = fs.readFileSync(MAIN_JS, 'utf8');
-  assert.match(src, /this\.activeSourcePageNum = pageNum;/, 'the clicked citation page must be retained');
-  assert.match(src, /this\.extractPdfText\(file, pageNum\)/, 'PDF upload must pass the retained page');
+  assert.match(src, /this\.activeSourceLocator = pageLocator;/, 'the clicked citation locator must be retained');
+  assert.match(src, /this\.extractPdfText\(file, this\.activeSourceLocator\)/, 'PDF upload must pass the retained locator');
 
-  const start = src.indexOf('        async extractPdfText(file, pageNum = null) {');
+  const start = src.indexOf('        requestPdfPageSelection(message, defaultValue = \'\') {');
   const end = src.indexOf('        // Wire an uploaded PDF', start);
-  assert.ok(start !== -1 && end > start, 'could not locate extractPdfText');
-  const method = src.slice(start, end);
+  assert.ok(start !== -1 && end > start, 'could not locate PDF locator methods');
+  const methods = src.slice(start, end);
   const requested = [];
+  const labels = Array(400).fill(null);
+  labels[9] = '317';
+  labels[10] = '318';
+  labels[11] = '319';
   const pdf = {
     numPages: 400,
+    async getPageLabels() { return labels; },
     async getPage(number) {
       requested.push(number);
       return { async getTextContent() { return { items: [{ str: `Text on page ${number}` }] }; } };
@@ -184,21 +189,36 @@ test('PDF upload extracts only the page retained from the citation', async () =>
   };
 
   const Harness = new Function(`
+    const MAX_PDF_PAGE_SELECTION = 50;
     class Harness {
       constructor(pdf) { this.pdf = pdf; }
       ensurePdfJs() { return Promise.resolve({ getDocument: () => ({ promise: Promise.resolve(this.pdf) }) }); }
       t(en, vars = {}) { return en.replace(/\\{(\\w+)\\}/g, (_, key) => vars[key] ?? ''); }
-${method}
+${methods}
     }
     return Harness;
   `)();
   const instance = new Harness(pdf);
   const file = { arrayBuffer: async () => new ArrayBuffer(8) };
 
-  assert.equal(await instance.extractPdfText(file, 317), 'Text on page 317');
-  assert.deepEqual(requested, [317], 'no uncited PDF page should be traversed');
-  await assert.rejects(
-    () => instance.extractPdfText(file, 401),
+  const printed = { kind: 'pages', start: 317, end: 319, text: 'pp. 317-319' };
+  assert.equal(
+    await instance.extractPdfText(file, printed),
+    'Text on page 10\n\nText on page 11\n\nText on page 12',
+  );
+  assert.deepEqual(requested, [10, 11, 12], 'printed labels must map to physical PDF pages');
+
+  requested.length = 0;
+  instance.requestPdfPageSelection = () => '20-21';
+  const textual = { kind: 'text', text: 'chap. 2, sec. 5' };
+  assert.equal(
+    await instance.extractPdfText(file, textual),
+    'Text on page 20\n\nText on page 21',
+  );
+  assert.deepEqual(requested, [20, 21], 'a textual locator must use the pages supplied by the editor');
+
+  assert.throws(
+    () => instance.parsePdfPageSelection('401', 400),
     /cited page 401 is not present.*400 pages/i,
   );
 });

@@ -4,11 +4,33 @@ import { JSDOM } from 'jsdom';
 import {
   extractHttpUrl,
   extractReferenceUrl,
+  extractPageLocator,
+  extractPageNumber,
   isGoogleBooksUrl,
   isArchiveUrl,
   isInternalWikiLink,
   parseArchiveOrgUrl,
 } from '../core/urls.js';
+
+function referenceWithText(text) {
+  const jsdom = new JSDOM(`<!DOCTYPE html><body>
+    <a id="ref" href="#cite_note-1">1</a>
+    <span id="cite_note-1">${text}</span>
+  </body>`);
+  return { doc: jsdom.window.document, ref: jsdom.window.document.getElementById('ref') };
+}
+
+test('extractPageLocator preserves numeric ranges and extractPageNumber stays backward compatible', () => {
+  const { doc, ref } = referenceWithText('Book title, pp. 317–320.');
+  assert.deepEqual(extractPageLocator(ref, doc), { kind: 'pages', start: 317, end: 320, text: 'pp. 317–320' });
+  assert.equal(extractPageNumber(ref, doc), 317);
+});
+
+test('extractPageLocator preserves chapter and section locators for manual PDF mapping', () => {
+  const { doc, ref } = referenceWithText('Book title, chap. 2, sec. 5.');
+  assert.deepEqual(extractPageLocator(ref, doc), { kind: 'text', text: 'chap. 2, sec. 5.' });
+  assert.equal(extractPageNumber(ref, doc), null);
+});
 
 test('extractHttpUrl pulls href from a direct <a>', () => {
   // The function calls querySelectorAll on the element, so it needs a container
