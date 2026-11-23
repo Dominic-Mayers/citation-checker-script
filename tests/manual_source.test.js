@@ -109,3 +109,53 @@ test('overriding the source clears a stale verdict from a previous fetch', () =>
   assert.equal(doc.getElementById('verifier-verdict').textContent, '');
   assert.equal(doc.getElementById('verifier-comments').textContent, '');
 });
+
+test('a blocked source offers the browser download and existing PDF upload path', () => {
+  const src = fs.readFileSync(MAIN_JS, 'utf8');
+  assert.match(
+    src,
+    /if \(fetchResult\.status === 403\) \{\s*this\.showBlockedSourceInput\(refUrl\);\s*return;/,
+    'the 403 fetch branch must open the guided manual-source path',
+  );
+  const start = src.indexOf('        showBlockedSourceInput(url) {');
+  const end = src.indexOf('        hideSourceTextInput() {', start);
+  assert.ok(start !== -1 && end > start, 'could not locate showBlockedSourceInput');
+  const method = src.slice(start, end);
+  const dom = new JSDOM('<div id="verifier-source-text"></div>');
+
+  const Harness = new Function('document', `
+    class Harness {
+      constructor() { this.calls = []; }
+      t(en) { return en; }
+      escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+      showSourceTextInput(forOverride, message) { this.calls.push({ kind: 'input', forOverride, message }); }
+      updateStatus(message, isError) { this.calls.push({ kind: 'status', message, isError }); }
+${method}
+    }
+    return Harness;
+  `)(dom.window.document);
+
+  const instance = new Harness();
+  const url = 'https://example.test/source.pdf?x=1&y=2';
+  instance.showBlockedSourceInput(url);
+
+  const link = dom.window.document.querySelector('#verifier-source-text a');
+  assert.equal(link.href, url);
+  assert.equal(link.target, '_blank');
+  assert.equal(link.rel, 'noopener noreferrer');
+  assert.match(link.textContent, /Open source to download/);
+  assert.equal(instance.calls[0].kind, 'input', 'the existing upload panel must be opened');
+  assert.equal(instance.calls[0].forOverride, false);
+  assert.deepEqual(instance.calls.at(-1), {
+    kind: 'status',
+    message: 'The site refused automated access (HTTP 403). Open the source in your browser, download it, then upload the PDF below.',
+    isError: true,
+  });
+});

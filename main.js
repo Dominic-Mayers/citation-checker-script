@@ -4897,6 +4897,9 @@ function useToolforgeSourceFetcher() {
         'Fetching source content...': 'Récupération du contenu de la source…',
         'Could not fetch source{status}{reason}. Please paste the source text below.':
             'Impossible de récupérer la source{status}{reason}. Veuillez coller le texte de la source ci-dessous.',
+        'The site refused automated access (HTTP 403). Open the source in your browser, download it, then upload the PDF below.':
+            'Le site a refusé l’accès automatisé (HTTP 403). Ouvrez la source dans votre navigateur, téléchargez-la, puis téléversez le PDF ci-dessous.',
+        'Open source to download': 'Ouvrir la source pour la télécharger',
         'Source fetched. Ready to verify.': 'Source récupérée. Prêt à vérifier.',
         'Ready to verify claim against source': 'Prêt à vérifier l’affirmation par rapport à la source',
         'Error: {message}': 'Erreur : {message}',
@@ -5272,6 +5275,9 @@ function useToolforgeSourceFetcher() {
         'Fetching source content...': 'Obteniendo el contenido de la fuente…',
         'Could not fetch source{status}{reason}. Please paste the source text below.':
             'No se ha podido obtener la fuente{status}{reason}; el texto de la fuente puede pegarse a continuación.',
+        'The site refused automated access (HTTP 403). Open the source in your browser, download it, then upload the PDF below.':
+            'El sitio rechazó el acceso automatizado (HTTP 403). Abra la fuente en el navegador, descárguela y suba el PDF a continuación.',
+        'Open source to download': 'Abrir la fuente para descargarla',
         'Source fetched. Ready to verify.': 'Fuente obtenida. Todo listo para verificar.',
         'Ready to verify claim against source': 'Todo listo para verificar la afirmación con la fuente',
         'Error: {message}': 'Error: {message}',
@@ -5643,6 +5649,9 @@ function useToolforgeSourceFetcher() {
         'Fetching source content...': 'Получение содержимого источника…',
         'Could not fetch source{status}{reason}. Please paste the source text below.':
             'Не удалось получить источник{status}{reason}. Вставьте текст источника ниже.',
+        'The site refused automated access (HTTP 403). Open the source in your browser, download it, then upload the PDF below.':
+            'Сайт отклонил автоматический доступ (HTTP 403). Откройте источник в браузере, скачайте его, затем загрузите PDF ниже.',
+        'Open source to download': 'Открыть источник для скачивания',
         'Source fetched. Ready to verify.': 'Источник получен. Готово к проверке.',
         'Ready to verify claim against source': 'Готово к проверке утверждения по источнику',
         'Error: {message}': 'Ошибка: {message}',
@@ -6023,6 +6032,9 @@ function useToolforgeSourceFetcher() {
         'Fetching source content...': 'אחזור תוכן המקור…',
         'Could not fetch source{status}{reason}. Please paste the source text below.':
             'לא ניתן היה לאחזר את המקור{status}{reason}. יש להדביק את טקסט המקור למטה.',
+        'The site refused automated access (HTTP 403). Open the source in your browser, download it, then upload the PDF below.':
+            'האתר דחה גישה אוטומטית (HTTP 403). יש לפתוח את המקור בדפדפן, להוריד אותו ואז להעלות את קובץ ה־PDF למטה.',
+        'Open source to download': 'פתיחת המקור להורדה',
         'Source fetched. Ready to verify.': 'המקור אוחזר. מוכן לבדיקה.',
         'Ready to verify claim against source': 'מוכן לבדיקת הטענה מול המקור',
         'Error: {message}': 'שגיאה: {message}',
@@ -8567,6 +8579,10 @@ function useToolforgeSourceFetcher() {
                 }
 
                 if (!fetchResult.content) {
+                    if (fetchResult.status === 403) {
+                        this.showBlockedSourceInput(refUrl);
+                        return;
+                    }
                     // A 2xx here is the proxy's own status, not the source's
                     // (the Worker's error JSON carries none), so showing it
                     // read as "HTTP 200: Source returned 429".
@@ -8634,6 +8650,20 @@ function useToolforgeSourceFetcher() {
             }
             this.sourceTextInput.setValue('');
             this.hideOverrideButton();
+        }
+
+        // A 403 often means that an anti-bot gate allows the editor's browser
+        // but rejects our server-side fetcher. Put the existing PDF-upload path
+        // directly in front of the editor and keep the original source one
+        // click away; no attempt is made to bypass the publisher's gate.
+        showBlockedSourceInput(url) {
+            const message = this.t('The site refused automated access (HTTP 403). Open the source in your browser, download it, then upload the PDF below.');
+            this.showSourceTextInput(false, message);
+            document.getElementById('verifier-source-text').innerHTML = `
+                <div>${this.escapeHtml(message)}</div>
+                <a href="${this.escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(this.t('Open source to download'))}</a>
+            `;
+            this.updateStatus(message, true);
         }
 
         hideSourceTextInput() {

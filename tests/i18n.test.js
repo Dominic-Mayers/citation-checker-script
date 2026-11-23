@@ -188,11 +188,10 @@ test('wiki links in translated strings point at the English wiki', () => {
 test('every this.t() key in main.js has a translation in every language', () => {
   const keys = new Set();
   for (const m of SRC.matchAll(/this\.t\(\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g)) {
-    keys.add(JSON.parse(
-      m[1][0] === "'"
-        ? `"${m[1].slice(1, -1).replace(/\\'/g, "'").replace(/"/g, '\\"')}"`
-        : m[1]
-    ));
+    // This is a JavaScript source literal, not JSON: main.js deliberately uses
+    // \x7e for MediaWiki-safe timestamp markers, and JSON.parse rejects \xNN.
+    // The regex above limits the input to one quoted string literal.
+    keys.add(Function(`"use strict"; return (${m[1]});`)());
   }
   assert.ok(keys.size > 100, `expected the UI to use many t() strings, found ${keys.size}`);
   for (const lang of LANGS) {
