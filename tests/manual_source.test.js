@@ -165,6 +165,42 @@ ${method}
   });
 });
 
+test('a direct PDF network failure offers browser download and PDF upload', () => {
+  const src = fs.readFileSync(MAIN_JS, 'utf8');
+  assert.match(
+    src,
+    /if \(\/\\\.pdf.*\.test\(refUrl\)\) \{\s*this\.showUnavailablePdfInput\(refUrl\);\s*return;/,
+    'a failed direct PDF fetch must use the guided upload path',
+  );
+  const start = src.indexOf('        showUnavailablePdfInput(url) {');
+  const end = src.indexOf('        // The current fetcher returns', start);
+  assert.ok(start !== -1 && end > start, 'could not locate failed-PDF source methods');
+  const methods = src.slice(start, end);
+  const dom = new JSDOM('<div id="verifier-source-text"></div>');
+
+  const Harness = new Function('document', `
+    class Harness {
+      constructor() { this.calls = []; }
+      t(en) { return en; }
+      escapeHtml(value) { return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
+      showSourceTextInput(forOverride, message) { this.calls.push({ kind: 'input', forOverride, message }); }
+      updateStatus(message, isError) { this.calls.push({ kind: 'status', message, isError }); }
+${methods}
+    }
+    return Harness;
+  `)(dom.window.document);
+
+  const instance = new Harness();
+  const url = 'https://theses.hal.science/tel-03419625v1/file/CABOT.pdf';
+  instance.showUnavailablePdfInput(url);
+
+  assert.equal(dom.window.document.querySelector('a').href, url);
+  assert.equal(instance.calls[0].kind, 'input');
+  assert.equal(instance.calls[0].forOverride, false);
+  assert.match(instance.calls[0].message, /PDF could not be fetched automatically/);
+  assert.equal(instance.calls.at(-1).isError, true);
+});
+
 test('an unlinked source opens the PDF upload path and displays its retained locator', () => {
   const src = fs.readFileSync(MAIN_JS, 'utf8');
   assert.match(

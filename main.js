@@ -4750,6 +4750,8 @@ function useToolforgeSourceFetcher() {
             'Aucune URL trouvée. Veuillez coller le texte de la source ci-dessous :',
         'No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.':
             'Aucune URL en ligne n’a été trouvée. Téléversez une copie numérique (PDF) ci-dessous; les pages ou le localisateur cités{locator} seront utilisés.',
+        'The PDF could not be fetched automatically. Open it in your browser, download it, then upload it below.':
+            'Le PDF n’a pas pu être récupéré automatiquement. Ouvrez-le dans votre navigateur, téléchargez-le, puis téléversez-le ci-dessous.',
         'Manual Source Text:': 'Texte de source manuel :',
         'No source loaded.': 'Aucune source chargée.',
         'Click "Verify Claim" to verify the selected claim against the source.':
@@ -5142,6 +5144,8 @@ function useToolforgeSourceFetcher() {
             'No se ha encontrado ninguna URL; el texto de la fuente puede pegarse a continuación:',
         'No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.':
             'No se ha encontrado ninguna URL en línea. Puede cargarse una copia digital (PDF) a continuación; se usarán las páginas o el localizador citados{locator}.',
+        'The PDF could not be fetched automatically. Open it in your browser, download it, then upload it below.':
+            'El PDF no se ha podido obtener automáticamente. Puede abrirse en el navegador, descargarse y cargarse a continuación.',
         'Manual Source Text:': 'Texto de la fuente introducido manualmente:',
         'No source loaded.': 'No hay ninguna fuente cargada.',
         'Click "Verify Claim" to verify the selected claim against the source.':
@@ -5530,6 +5534,8 @@ function useToolforgeSourceFetcher() {
             'URL не найден. Вставьте текст источника ниже:',
         'No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.':
             'URL в интернете не найден. Загрузите цифровую копию (PDF) ниже; будут использованы указанные страницы или локатор{locator}.',
+        'The PDF could not be fetched automatically. Open it in your browser, download it, then upload it below.':
+            'Не удалось получить PDF автоматически. Откройте его в браузере, скачайте и загрузите ниже.',
         'Manual Source Text:': 'Текст источника (введён вручную):',
         'No source loaded.': 'Источник не загружен.',
         'Click "Verify Claim" to verify the selected claim against the source.':
@@ -5926,6 +5932,8 @@ function useToolforgeSourceFetcher() {
             'לא נמצאה כתובת URL. יש להדביק את טקסט המקור למטה:',
         'No online URL was found. Upload a digital copy (PDF) below; the cited pages or locator{locator} will be used.':
             'לא נמצאה כתובת URL מקוונת. ניתן להעלות עותק דיגיטלי (PDF) למטה; ייעשה שימוש בעמודים או במאתר שצוינו{locator}.',
+        'The PDF could not be fetched automatically. Open it in your browser, download it, then upload it below.':
+            'לא ניתן היה לאחזר את ה־PDF באופן אוטומטי. יש לפתוח אותו בדפדפן, להוריד אותו ואז להעלות אותו למטה.',
         'Manual Source Text:': 'טקסט מקור שהוזן ידנית:',
         'No source loaded.': 'לא נטען מקור.',
         'Click "Verify Claim" to verify the selected claim against the source.':
@@ -8668,6 +8676,10 @@ function useToolforgeSourceFetcher() {
                         this.showBlockedSourceInput(refUrl);
                         return;
                     }
+                    if (/\.pdf(?:$|[?#])/i.test(refUrl)) {
+                        this.showUnavailablePdfInput(refUrl);
+                        return;
+                    }
                     // A 2xx here is the proxy's own status, not the source's
                     // (the Worker's error JSON carries none), so showing it
                     // read as "HTTP 200: Source returned 429".
@@ -8754,6 +8766,18 @@ function useToolforgeSourceFetcher() {
         // click away; no attempt is made to bypass the publisher's gate.
         showBlockedSourceInput(url) {
             const message = this.t('The site refused automated access (HTTP 403). Open the source in your browser, download it, then upload the PDF below.');
+            this.showDownloadableSourceInput(url, message);
+        }
+
+        // A direct PDF can be perfectly accessible in the editor's browser
+        // while the proxy fails at the network/CORS layer and has no HTTP
+        // status to report. Keep the same useful manual fallback as for 403.
+        showUnavailablePdfInput(url) {
+            const message = this.t('The PDF could not be fetched automatically. Open it in your browser, download it, then upload it below.');
+            this.showDownloadableSourceInput(url, message);
+        }
+
+        showDownloadableSourceInput(url, message) {
             this.showSourceTextInput(false, message);
             document.getElementById('verifier-source-text').innerHTML = `
                 <div>${this.escapeHtml(message)}</div>
