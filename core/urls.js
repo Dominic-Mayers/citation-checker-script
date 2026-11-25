@@ -88,6 +88,13 @@ export function extractHttpUrl(element) {
     for (const link of links) {
         if (/web\.archive\.org/.test(link.href)) return link.href;
     }
+    // Prefer a direct PDF over a DOI resolver or landing page. CS1 citations
+    // commonly render DOI before "read online", even when the latter is the
+    // actual document. Picking the DOI in that case can leave the verifier
+    // with only a repository's navigation page instead of the cited pages.
+    for (const link of links) {
+        if (!isArchiveUrl(link.href) && /\.pdf(?:$|[?#])/i.test(link.href)) return link.href;
+    }
     // Then any live URL; other archive services (archive.today etc.) last.
     for (const link of links) {
         if (!isArchiveUrl(link.href)) return link.href;

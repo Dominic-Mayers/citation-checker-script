@@ -56,6 +56,19 @@ test('extractHttpUrl pulls href from a direct <a>', () => {
   assert.equal(url, 'https://example.com/page');
 });
 
+test('extractHttpUrl prefers a direct PDF over an earlier DOI link', () => {
+  // frwiki, Trilemme de Münchhausen, ref. 3: CS1 renders the DOI before
+  // "lire en ligne", but the DOI resolves to a Theses.fr landing page while
+  // the second URL is the document whose cited page must be extracted.
+  const pdfUrl = 'https://theses.hal.science/tel-03419625v1/file/CABOT.pdf';
+  const jsdom = new JSDOM(`<!DOCTYPE html><body><span id="container">
+    <a href="https://doi.org/10.70675/19d151f4z01f4z41f2zafb9z0c14a3449b53">DOI</a>
+    <a href="${pdfUrl}">lire en ligne</a>
+  </span></body>`);
+  const element = jsdom.window.document.getElementById('container');
+  assert.equal(extractHttpUrl(element), pdfUrl);
+});
+
 test('extractHttpUrl prefers Internet Archive URLs over live URLs', () => {
   const archiveUrl = 'https://web.archive.org/web/20250515222512/https://example.com/page';
   const jsdom = new JSDOM(`<!DOCTYPE html><body><span id="container">
