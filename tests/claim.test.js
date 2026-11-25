@@ -60,6 +60,46 @@ test('extractClaimText returns text preceding the cited reference', () => {
   assert.ok(claim.includes('boiling point of water is 100 degrees Celsius'));
 });
 
+test('a citation before the colon includes the immediately following list', () => {
+  const doc = mkDoc(`
+    <p>The trilemma has three alternatives<sup id="cite_ref-1" class="reference"><a href="#cite_note-1">[1]</a></sup>:</p>
+    <ul>
+      <li>an infinite regress;</li>
+      <li>circular reasoning;</li>
+      <li>a dogmatic stopping point.</li>
+    </ul>
+  `);
+  const ref = doc.getElementById('cite_ref-1');
+
+  assert.equal(
+    extractClaimText(ref),
+    'The trilemma has three alternatives: an infinite regress; circular reasoning; a dogmatic stopping point.',
+  );
+});
+
+test('sentence scope keeps the entire list cited before its colon', () => {
+  const doc = mkDoc(`
+    <p>Earlier background. The accepted colours are<sup id="cite_ref-1" class="reference"><a href="#cite_note-1">[1]</a></sup>:</p>
+    <ol><li>red</li><li>green</li><li>blue</li></ol>
+  `);
+
+  assert.equal(
+    extractClaimText(doc.getElementById('cite_ref-1'), { scope: 'sentence' }),
+    'The accepted colours are: red; green; blue',
+  );
+});
+
+test('a citation inside a list item does not absorb the rest of the list', () => {
+  const doc = mkDoc(`
+    <ul>
+      <li>First item.<sup id="cite_ref-1" class="reference"><a href="#cite_note-1">[1]</a></sup></li>
+      <li>Second unrelated item.</li>
+    </ul>
+  `);
+
+  assert.equal(extractClaimText(doc.getElementById('cite_ref-1')), 'First item.');
+});
+
 test('extractClaimText strips maintenance markers from the returned claim', () => {
   const doc = mkDoc(`
     <p>Elvis is still alive[failed verification].<sup id="cite_ref-1" class="reference"><a href="#cite_note-1">[1]</a></sup></p>

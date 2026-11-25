@@ -1787,6 +1787,43 @@ function claimBounds(refElement) {
         : { startAfter: null, endBefore: currentRef, root: container };
 }
 
+function cleanClaimText(text) {
+    return text
+        .replace(/\[\d+\]/g, '')                 // Remove reference numbers like [1], [2]
+        .replace(/\s+/g, ' ')                    // Normalize whitespace (incl. NBSP) so the marker regex matches
+        .replace(MAINTENANCE_MARKER_RE, '')      // Remove maintenance markers like [failed verification]
+        .replace(/\s+/g, ' ')                    // Collapse the gap left by the marker strip
+        .trim();
+}
+
+// The standard encyclopedic form for citing a whole list is:
+//   <p>The three alternatives are<ref>...</ref>:</p><ul>...</ul>
+// The citation precedes the colon, so the ordinary "text before the ref"
+// boundary cannot see the list. Recognise only this narrow, unambiguous form:
+// after the citation group there is nothing but a colon, and the paragraph's
+// immediate next element is a list. A citation inside an <li>, or prose after
+// the citation, retains the normal behaviour.
+function followingCitedListText(refElement) {
+    const currentRef = refElement.closest('.reference');
+    const paragraph = currentRef?.closest('p');
+    if (!currentRef || !paragraph) return '';
+
+    const group = getCitationGroup(refElement);
+    const lastRef = group[group.length - 1] || currentRef;
+    const tail = textBetween(lastRef, null, paragraph);
+    if (!/^\s*[:：]\s*$/u.test(tail)) return '';
+
+    const list = paragraph.nextElementSibling;
+    if (!list?.matches('ul, ol')) return '';
+
+    const items = Array.from(list.children)
+        .filter(child => child.matches('li'))
+        .map(item => cleanClaimText(textBetween(null, null, item)))
+        .map(item => item.replace(/[;,]\s*$/u, ''))
+        .filter(Boolean);
+    return items.join('; ');
+}
+
 function extractClaimText(refElement, { scope = 'paragraph', splitLastSentence = lastSentence } = {}) {
     const container = refElement.closest('p, li, td, div, section');
     if (!container) {
@@ -1812,12 +1849,7 @@ function extractClaimText(refElement, { scope = 'paragraph', splitLastSentence =
     // in MAINTENANCE_MARKER_RE would otherwise fail to match) AND AFTER the
     // strip (removing a marker that had a leading/trailing space leaves a
     // double space behind).
-    claimText = claimText
-        .replace(/\[\d+\]/g, '')                 // Remove reference numbers like [1], [2]
-        .replace(/\s+/g, ' ')                    // Normalize whitespace (incl. NBSP) so the marker regex matches
-        .replace(MAINTENANCE_MARKER_RE, '')      // Remove maintenance markers like [failed verification]
-        .replace(/\s+/g, ' ')                    // Collapse the gap left by the marker strip
-        .trim();
+    claimText = cleanClaimText(claimText);
 
     // Applied last, after the paragraph-scope text is settled — narrowing to
     // the final sentence is a separate concern from finding the claim's
@@ -1837,6 +1869,9 @@ function extractClaimText(refElement, { scope = 'paragraph', splitLastSentence =
     if (scope === 'sentence') {
         claimText = splitLastSentence(claimText);
     }
+
+    const listText = followingCitedListText(refElement);
+    if (listText) claimText = `${claimText}: ${listText}`;
 
     return claimText;
 }
